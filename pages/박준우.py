@@ -3,11 +3,10 @@ import streamlit as st
 import google.generativeai as genai
 
 # 1. 페이지 레이아웃 및 기본 설정
-st.set_page_config(
+st.set_page_config
     page_title="사운드 가드 (Sound Guard)",
     page_icon="🔇",
     layout="centered"
-)
 
 # UI 가독성을 위한 커스텀 스타일 정의
 st.markdown("""
