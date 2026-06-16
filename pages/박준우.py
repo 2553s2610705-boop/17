@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 
+# 1. 페이지 초기 설정
 st.set_page_config(
     page_title="Sound Guard",
     page_icon="🔇",
@@ -10,9 +11,11 @@ st.set_page_config(
 st.title("🔇 사운드 가드: 소음 통제소")
 st.write("현재 데시벨 환경을 체크하고 청각 보호를 위한 조언을 확인하세요.")
 
+# 2. 사이드바 제어판
 st.sidebar.header("설정")
 target_limit = st.sidebar.slider("허용할 기준 데시벨 (dB)", min_value=30, max_value=100, value=65, step=5)
 
+# 비밀키 로드
 api_key = st.secrets.get("GEMINI_API_KEY", None)
 
 if api_key:
@@ -21,6 +24,7 @@ if api_key:
 else:
     st.sidebar.warning("API 키 미설정 (AI 기능 제한)")
 
+# 3. 메인 소음 입력 창
 st.subheader("🔊 현재 환경 데시벨 입력")
 
 col1, col2, col3, col4 = st.columns(4)
@@ -39,6 +43,7 @@ if col4.button("콘서트장 (110 dB)"):
 
 current_db = st.slider("데시벨 조절 (dB)", min_value=0, max_value=140, key="current_db")
 
+# 4. 데시벨 분석기 정의
 def analyze_decibel(db):
     if db <= 40:
         return "안전", "쾌적한 수면 및 집중이 가능한 수준", "정상적인 환경이므로 특별한 조치가 필요 없습니다."
@@ -59,6 +64,7 @@ st.write(f"💡 상황 예시: {status_desc}")
 
 st.markdown("---")
 
+# 5. 기준값 초과 알림 처리
 if current_db > target_limit:
     excess = current_db - target_limit
     st.error(f"🚨 경고: 기준치({target_limit} dB)를 {excess} dB 초과했습니다!")
@@ -69,6 +75,7 @@ else:
 
 st.markdown("---")
 
+# 6. AI 솔루션 허브
 st.subheader("🤖 AI 맞춤형 소음 해결 대처 가이드")
 user_situation = st.text_input(
     "구체적인 소음 상황을 입력하세요",
