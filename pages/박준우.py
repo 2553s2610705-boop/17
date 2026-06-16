@@ -1,99 +1,128 @@
 import streamlit as st
-import google.generativeai as genai
 
-# 1. 페이지 초기 설정
 st.set_page_config(
-    page_title="Sound Guard",
+    page_title="소음 경고 도우미",
     page_icon="🔇",
     layout="centered"
 )
 
-st.title("🔇 사운드 가드: 소음 통제소")
-st.write("현재 데시벨 환경을 체크하고 청각 보호를 위한 조언을 확인하세요.")
+st.title("🔇 소음 경고 도우미")
+st.write("데시벨(dB)을 입력하면 소음 수준을 분석하고 조용히 해달라는 안내 문구를 제공합니다.")
 
-# 2. 사이드바 제어판
-st.sidebar.header("설정")
-target_limit = st.sidebar.slider("허용할 기준 데시벨 (dB)", min_value=30, max_value=100, value=65, step=5)
+# 장소별 기준
+noise_limits = {
+    "도서관": 40,
+    "병원": 45,
+    "학교": 50,
+    "사무실": 55,
+    "아파트": 60,
+    "카페": 65
+}
 
-# 비밀키 로드
-api_key = st.secrets.get("GEMINI_API_KEY", None)
-
-if api_key:
-    st.sidebar.success("AI 연결 성공")
-    genai.configure(api_key=api_key)
-else:
-    st.sidebar.warning("API 키 미설정 (AI 기능 제한)")
-
-# 3. 메인 소음 입력 창
-st.subheader("🔊 현재 환경 데시벨 입력")
-
-col1, col2, col3, col4 = st.columns(4)
-
-if "current_db" not in st.session_state:
-    st.session_state.current_db = 55
-
-if col1.button("도서관 (40 dB)"): 
-    st.session_state.current_db = 40
-if col2.button("일반 카페 (65 dB)"): 
-    st.session_state.current_db = 65
-if col3.button("지하철 (80 dB)"): 
-    st.session_state.current_db = 80
-if col4.button("콘서트장 (110 dB)"): 
-    st.session_state.current_db = 110
-
-current_db = st.slider("데시벨 조절 (dB)", min_value=0, max_value=140, key="current_db")
-
-# 4. 데시벨 분석기 정의
-def analyze_decibel(db):
-    if db <= 40:
-        return "안전", "쾌적한 수면 및 집중이 가능한 수준", "정상적인 환경이므로 특별한 조치가 필요 없습니다."
-    elif db <= 60:
-        return "보통", "일반적인 대화나 조용한 사무실 수준", "일상적인 소음 수준입니다. 청각에 무리가 없습니다."
-    elif db <= 80:
-        return "주의", "전화 벨소리나 번화가 도로 수준", "체내 스트레스가 증가할 수 있으니 주기적으로 휴식을 취하세요."
-    elif db <= 100:
-        return "위험", "철도변 소음이나 헤어드라이어 수준", "장시간 노출 시 난청을 유발합니다. 귀마개를 착용하세요."
-    else:
-        return "최고 위험", "전투기 이착륙 및 록밴드 공연 수준", "단시간 노출로도 청각 손상이 오니 즉시 대피하세요."
-
-status_title, status_desc, basic_advice = analyze_decibel(current_db)
-
-st.progress(min(current_db / 140, 1.0))
-st.write(f"📊 현재 등급: {status_title} ({current_db} dB)")
-st.write(f"💡 상황 예시: {status_desc}")
-
-st.markdown("---")
-
-# 5. 기준값 초과 알림 처리
-if current_db > target_limit:
-    excess = current_db - target_limit
-    st.error(f"🚨 경고: 기준치({target_limit} dB)를 {excess} dB 초과했습니다!")
-    st.warning(f"📢 대처 조언: {basic_advice}")
-else:
-    st.success(f"✅ 안전: 기준치({target_limit} dB) 이내에서 유지되고 있습니다.")
-    st.info(f"📢 가이드: {basic_advice}")
-
-st.markdown("---")
-
-# 6. AI 솔루션 허브
-st.subheader("🤖 AI 맞춤형 소음 해결 대처 가이드")
-user_situation = st.text_input(
-    "구체적인 소음 상황을 입력하세요",
-    placeholder="예: 아파트 윗집 발망치 소리, 옆자리 직원의 키보드 소리"
+place = st.selectbox(
+    "장소를 선택하세요",
+    list(noise_limits.keys())
 )
 
-if st.button("AI 실시간 솔루션 받기"):
-    if not api_key:
-        st.error("Secrets에 GEMINI_API_KEY를 등록해야 사용 가능합니다.")
-    elif not user_situation.strip():
-        st.warning("상황을 입력창에 적어주세요.")
+limit_db = noise_limits[place]
+
+st.info(f"📍 {place} 권장 기준: {limit_db} dB")
+
+db = st.number_input(
+    "현재 측정된 데시벨(dB)",
+    min_value=0.0,
+    max_value=150.0,
+    value=50.0,
+    step=1.0
+)
+
+
+def get_warning_message(place_name, current_db, limit):
+    diff = current_db - limit
+
+    if diff <= 0:
+        level = "정상"
+        color = "success"
+        message = (
+            f"{place_name}의 권장 소음 기준을 지키고 있습니다. "
+            "현재 환경은 비교적 조용한 상태입니다."
+        )
+
+    elif diff <= 10:
+        level = "주의"
+        color = "warning"
+        message = (
+            f"현재 소음이 권장 기준보다 {diff:.0f}dB 높습니다.\n\n"
+            "주변 이용자를 위해 목소리를 조금 낮춰 주세요."
+        )
+
+    elif diff <= 20:
+        level = "경고"
+        color = "warning"
+        message = (
+            f"현재 소음이 권장 기준보다 {diff:.0f}dB 높습니다.\n\n"
+            "대화 소리를 줄이고 조용한 환경 유지에 협조해 주세요."
+        )
+
     else:
-        with st.spinner("AI가 대처법을 계산 중입니다..."):
-            try:
-                model = genai.GenerativeModel("gemini-2.5-flash-lite")
-                prompt = f"소음 상황: {user_situation}, 현재 소음 수치: {current_db} dB. 이 상황을 해결할 수 있는 정중하고 효과적인 대처 멘트와 행동 요령을 3문장 이내로 친절하게 조언해줘."
-                response = model.generate_content(prompt)
-                st.info("💡 AI의 맞춤형 솔루션")
-                st.write(response.text)
-            except Exception as e:
-                st.error(f"오류가 발생했습니다: {str(e)}")
+        level = "매우 위험"
+        color = "error"
+        message = (
+            f"현재 소음이 권장 기준보다 {diff:.0f}dB 높습니다.\n\n"
+            "소음 수준이 매우 높습니다. 즉시 소음을 줄여 주시기 바랍니다."
+        )
+
+    return level, color, message
+
+
+try:
+    level, color, warning_text = get_warning_message(
+        place,
+        db,
+        limit_db
+    )
+
+    st.subheader("분석 결과")
+    st.metric(
+        label="소음 수준",
+        value=level,
+        delta=f"{db - limit_db:.0f} dB"
+    )
+
+    if color == "success":
+        st.success(warning_text)
+    elif color == "warning":
+        st.warning(warning_text)
+    else:
+        st.error(warning_text)
+
+    st.divider()
+
+    st.subheader("📢 안내 문구")
+
+    if db <= limit_db:
+        notice = (
+            f"[{place}] 현재 소음은 권장 기준 이내입니다. "
+            "쾌적한 환경 유지에 감사드립니다."
+        )
+    else:
+        notice = (
+            f"[{place}] 현재 소음이 권장 기준({limit_db}dB)을 초과했습니다. "
+            "주변 이용자를 위해 목소리를 낮추고 조용한 환경 유지에 협조해 주세요."
+        )
+
+    st.text_area(
+        "복사하여 사용할 수 있는 안내 문구",
+        value=notice,
+        height=120
+    )
+
+except Exception as e:
+    st.error("분석 중 오류가 발생했습니다.")
+    st.exception(e)
+
+st.divider()
+
+st.caption(
+    "※ 본 앱은 일반적인 환경 소음 기준을 참고하여 작성된 예시 도구입니다."
+)
