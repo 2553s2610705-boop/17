@@ -1,116 +1,164 @@
 import streamlit as st
-from google import genai
+import pandas as pd
+import matplotlib.pyplot as plt
 
-# 페이지 설정
+# Gemini 사용
+try:
+    import google.generativeai as genai
+except:
+    genai = None
+
+
 st.set_page_config(
-    page_title="오늘의 행운 색깔 챗봇",
-    page_icon="🎨",
+    page_title="주간 소란 지수 분석기",
+    page_icon="📊",
+    layout="wide"
 )
 
-st.title("🎨 오늘의 행운 색깔 챗봇")
-st.caption("Gemini 2.5 Flash Lite 기반")
+st.title("📊 주간 소란 지수 분석기")
+st.caption("일주일 동안의 소란 지수를 분석하고 AI 피드백을 받아보세요.")
 
-# API 키 확인
+days = ["월", "화", "수", "목", "금", "토", "일"]
+
+st.subheader("일주일 소란 지수 입력")
+
+scores = []
+
+cols = st.columns(7)
+
+for i, day in enumerate(days):
+    with cols[i]:
+        value = st.number_input(
+            day,
+            min_value=0,
+            max_value=100,
+            value=50,
+            step=1
+        )
+        scores.append(value)
+
 try:
-    api_key = st.secrets["GEMINI_API_KEY"]
-except Exception:
-    st.error(
-        "GEMINI_API_KEY를 Streamlit Secrets에 설정해주세요."
+    df = pd.DataFrame({
+        "요일": days,
+        "소란지수": scores
+    })
+
+    avg_score = round(df["소란지수"].mean(), 1)
+
+    max_day = df.loc[df["소란지수"].idxmax(), "요일"]
+    max_value = df["소란지수"].max()
+
+    min_day = df.loc[df["소란지수"].idxmin(), "요일"]
+    min_value = df["소란지수"].min()
+
+    st.divider()
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("평균 소란 지수", avg_score)
+    c2.metric("최고 소란일", f"{max_day} ({max_value})")
+    c3.metric("최저 소란일", f"{min_day} ({min_value})")
+
+    if avg_score <= 30:
+        level = "매우 안정 😊"
+        color = "success"
+    elif avg_score <= 60:
+        level = "보통 🙂"
+        color = "info"
+    elif avg_score <= 80:
+        level = "주의 ⚠️"
+        color = "warning"
+    else:
+        level = "위험 🚨"
+        color = "error"
+
+    st.subheader("소란 위험도")
+
+    if color == "success":
+        st.success(level)
+    elif color == "info":
+        st.info(level)
+    elif color == "warning":
+        st.warning(level)
+    else:
+        st.error(level)
+
+    st.subheader("주간 소란 지수 그래프")
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    ax.plot(
+        df["요일"],
+        df["소란지수"],
+        marker="o"
     )
-    st.stop()
 
-# Gemini 클라이언트 생성
-try:
-    client = genai.Client(api_key=api_key)
-except Exception as e:
-    st.error(f"Gemini 클라이언트 생성 실패: {e}")
-    st.stop()
-
-# 채팅 기록 초기화
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "안녕하세요! 🎨\n\n"
-                "생년월일, 별자리, 기분, 또는 오늘의 목표를 알려주시면 "
-                "오늘의 행운 색깔을 추천해드릴게요."
-            ),
-        }
-    ]
-
-# 기존 메시지 표시
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# 사용자 입력
-prompt = st.chat_input("오늘의 행운 색깔을 알려줘!")
-
-if prompt:
-    # 사용자 메시지 저장
-    st.session_state.messages.append(
-        {"role": "user", "content": prompt}
+    ax.axhline(
+        avg_score,
+        linestyle="--",
+        label=f"평균 {avg_score}"
     )
 
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    ax.set_ylim(0, 100)
+    ax.set_ylabel("소란 지수")
+    ax.legend()
 
-    with st.chat_message("assistant"):
-        try:
-            system_prompt = """
-당신은 '오늘의 행운 색깔' 전문 챗봇입니다.
+    st.pyplot(fig)
 
-규칙:
-1. 사용자의 입력을 참고하여 오늘의 행운 색깔을 추천한다.
-2. 색깔 이름을 명확히 알려준다.
-3. 추천 이유를 2~4문장으로 설명한다.
-4. 오늘 하면 좋은 행동 1가지를 추가한다.
-5. 밝고 긍정적인 톤을 유지한다.
-6. 답변은 반드시 한국어로 작성한다.
-"""
+    st.subheader("데이터 표")
+    st.dataframe(df, use_container_width=True)
 
-            conversation = []
+    st.divider()
 
-            for msg in st.session_state.messages:
-                role = "User" if msg["role"] == "user" else "Assistant"
-                conversation.append(
-                    f"{role}: {msg['content']}"
+    st.subheader("🤖 AI 충고 / 칭찬")
+
+    if st.button("AI 분석 실행"):
+
+        if genai is None:
+            st.error("google-generativeai 라이브러리를 불러올 수 없습니다.")
+        else:
+
+            api_key = st.secrets.get("GEMINI_API_KEY")
+
+            if not api_key:
+                st.error(
+                    "GEMINI_API_KEY가 설정되지 않았습니다."
                 )
+            else:
+                try:
+                    genai.configure(api_key=api_key)
 
-            full_prompt = (
-                system_prompt
-                + "\n\n"
-                + "\n".join(conversation)
-            )
+                    model = genai.GenerativeModel(
+                        "gemini-2.5-flash-lite"
+                    )
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
-                contents=full_prompt,
-            )
+                    prompt = f"""
+                    당신은 생활환경 분석 전문가입니다.
 
-            answer = response.text
+                    일주일 소란 지수 데이터:
 
-            st.markdown(answer)
+                    {df.to_string(index=False)}
 
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": answer,
-                }
-            )
+                    평균: {avg_score}
 
-        except Exception as e:
-            error_message = (
-                f"오류가 발생했습니다.\n\n"
-                f"에러 내용: {str(e)}"
-            )
+                    아래 형식으로 답변하세요.
 
-            st.error(error_message)
+                    1. 현재 상태 평가
+                    2. 잘한 점 또는 칭찬
+                    3. 개선 조언
+                    4. 다음 주 목표
 
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": error_message,
-                }
-            )
+                    한국어로 친절하게 작성하세요.
+                    """
+
+                    response = model.generate_content(prompt)
+
+                    st.success("분석 완료")
+
+                    st.write(response.text)
+
+                except Exception as e:
+                    st.error(f"AI 분석 오류: {e}")
+
+except Exception as e:
+    st.error(f"분석 중 오류 발생: {e}")
